@@ -1,7 +1,7 @@
 import React, { useEffect,useState } from 'react'
 import { dummyPostsData } from '../assets/assets'
 import Loading from '../components/Loading'
-import StoriesBar from '../components/Storiesbar'
+import StoriesBar from '../components/StoriesBar'
 import Postcard from '../components/Postcard'
 import { assets } from "../assets/assets"; 
 import RecentMessages from '../components/RecentMessages'
