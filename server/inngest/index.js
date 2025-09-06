@@ -2,6 +2,7 @@ import { Inngest } from "inngest";
 import User from "../models/user.js";
 import Connection from "../models/connection.js";
 import sendEmail from "../configs/nodeMailer.js"
+import Message from "../models/Message.js";
 // import { connection } from "mongoose";
 
 export const inngest =new Inngest ({id:"moodly-app"});
@@ -113,12 +114,62 @@ const sendNewConnectionRequestReminder= inngest.createFunction(
         })
     }
 )
+//Inngest function to delete story after 24 hrs
+const deletestory = inngest.createFunction(
+    {id:'story-delete'},
+    {event: 'app/story.delete'},
+async({event, step})=>{
+     const{ storyId } = event.data;
+     const in24Hours = new Date(Date.now()+ 24*60*60*1000)
+     await step.sleepUntil('wait-for-24-hours', in24Hours)
+     await step.run('delete-story', async ()=>{
+        await Story.findByIdAndDelete(storyId)
+        return {message: 'Story deleted. '}
+     })
+})
+
+const sentNotificationOfUnseenMessages= inngest.createFunction(
+    {id:"send-unseen-messgages-notification"},
+    {cron:"TZ=America/New_York 0 9 * * *"},
+    async({step})=>{
+        const messages = await Message.find({seen: false}).populate('to_user_id');
+        const unseenCount={}
+
+        messages.map(message=>{
+            unseenCount[message.to_user_id._id]= (unseenCount[message.to_user_id._id] || 0)+1;
+        })
+        for (const userId in unseenCount){
+           const user = await User.findById(userId);
+
+           const subject =`💌 You have ${unseenCount[userId]} unseen messages`;
+
+           const body=`
+           <div style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2Hi ${user.full_name},></h2>
+            <p>You have ${unseenCount[userId]} unseen messages</p>
+            <p>Click <a href="${process.env.FRONTEND_URL}/messages" style="color:#eab308;">here</a> to view them</p>
+            <br/>
+            <p>Thanks,<br/>Moodly- Stay Vibed⚡⚡</p>
+           </div>
+           `;
+
+           await sendEmail({
+            to:user.email,
+            subject,
+            body
+           })
+        }
+        return {}
+    }
+)
 
 //Create an empty array where we'll export future Inngest funtions
 export const functions=[
     syncUserCreation,
     syncUserUpdation,
     syncUserDetetion,
-    sendNewConnectionRequestReminder
+    sendNewConnectionRequestReminder,
+    deletestory,
+    sentNotificationOfUnseenMessages
 
 ];
