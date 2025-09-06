@@ -2,6 +2,7 @@ import fs from "fs";
 import imagekit from "../configs/imagekit.js";
 import User from "../models/user.js";
 import { inngest } from "../inngest/index.js";
+import Story from "../models/Story.js"; // <-- Add this line
 
 //Add user story
 export const addUserStory = async (req, res)=>{
@@ -41,23 +42,31 @@ export const addUserStory = async (req, res)=>{
     }
 }
 //Get user stories
-export const getStories = async (req, res)=>{
-    try{
-      const { userId} = req.auth();
-      const user = await User.findById(userId)
+export const getStories = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const user = await User.findById(userId);
 
-      //user connections and followings
-      const userIds = [userId , ...user.connections, ...user.following]
-
-      const stories = await Story.find({
-        user: {$in: userIds}
-      }).populate('user').sort({createdAt: -1});
-
-      res.json ({success:true , stories});
-
-    } catch (error){
-        console.log(error);
-        res.json({success:false, message: error.message});
-
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
     }
-}
+
+    const userIds = [
+      userId, 
+      ...(Array.isArray(user.connections) ? user.connections : []), 
+      ...(Array.isArray(user.following) ? user.following : [])
+    ].map(id => id.toString()); // convert all IDs to string to match Story.user
+
+    // Fetch stories
+    const stories = await Story.find({
+      user: { $in: userIds }
+    })
+      .populate("user")
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, stories });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

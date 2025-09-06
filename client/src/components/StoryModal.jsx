@@ -1,10 +1,12 @@
-import { ArrowLeft } from 'lucide-react'
-import React, { useState } from 'react'
-import toast, {Toaster } from 'react-hot-toast'
-import AIStoryGenerator from './AIStoryGenerator'
+import { ArrowLeft } from 'lucide-react';
+import React, { useState } from 'react';
+import toast from 'react-hot-toast';
+import AIStoryGenerator from './AIStoryGenerator';
+import { useAuth } from '@clerk/clerk-react';
+import api from '../api/axios';
 
 const StoryModal = ({ setShowModal, fetchStories }) => {
-  const bgColor = [
+  const bgColors = [
     "linear-gradient(135deg, #f9d423, #ff4e50)",
     "linear-gradient(135deg, #24c6dc, #514a9d)",
     "linear-gradient(135deg, #ff9966, #ff5e62)",
@@ -17,119 +19,194 @@ const StoryModal = ({ setShowModal, fetchStories }) => {
     "linear-gradient(135deg, #c6ffdd, #fbd786, #f7797d)",
   ];
 
-  const [mode, setMode] = useState("text")
-  const [background, setBackground] = useState(bgColor[0])
-  const [text, setText] = useState("")
-  const [media, setMedia] = useState(null)
-  const [preview, setPreview] = useState(null)
+  const { getToken } = useAuth();
+  const MAX_VIDEO_DURATION = 60; // seconds
+  const MAX_VIDEO_SIZE_MB = 50; // MB
 
+  const [mode, setMode] = useState("text"); // text | media | ai
+  const [background, setBackground] = useState(bgColors[0]);
+  const [text, setText] = useState("");
+  const [media, setMedia] = useState(null);
+  const [preview, setPreview] = useState(null);
+
+  // Handle media upload
   const handleMediaUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setMedia(file)
-      setPreview(URL.createObjectURL(file))
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith("video")) {
+      if (file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
+        toast.error(`Video cannot exceed ${MAX_VIDEO_SIZE_MB} MB`);
+        setMedia(null);
+        setPreview(null);
+        return;
+      }
+
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(video.src);
+        if (video.duration > MAX_VIDEO_DURATION) {
+          toast.error("Video duration cannot exceed 1 minute");
+          setMedia(null);
+          setPreview(null);
+        } else {
+          setMedia(file);
+          setPreview(URL.createObjectURL(file));
+          setText("");
+          setMode("media");
+        }
+      };
+      video.src = URL.createObjectURL(file);
+    } else if (file.type.startsWith("image")) {
+      setMedia(file);
+      setPreview(URL.createObjectURL(file));
+      setText("");
+      setMode("media");
     }
-  }
+  };
 
-const handleCreateStory = async () => {
-  console.log({ text, media, background, preview });
+  // Handle story creation
+  const handleCreateStory = async () => {
+    // Determine media type
+    const mediaType =
+      mode === "media"
+        ? media?.type.startsWith("image")
+          ? "image"
+          : "video"
+        : mode === "ai"
+        ? "image"
+        : "text";
 
-  await new Promise((resolve) => setTimeout(resolve, 500)); 
-  setShowModal(false);
-  fetchStories && fetchStories();
-}
+    // Validation: text story cannot be empty
+    if (mode === "text" && !text.trim()) {
+      toast.error("Please write something about your mood");
+      return;
+    }
+
+    // Prepare FormData
+    const formData = new FormData();
+    if (mode === "text") formData.append("content", text.trim());
+    if ((mode === "media" || mode === "ai") && media) formData.append("media", media);
+    formData.append("media_type", mediaType);
+    formData.append("background_color", background);
+
+    try {
+      const token = await getToken();
+      const { data } = await api.post("/api/story/create", formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (data.success) {
+        setShowModal(false);
+        fetchStories();
+        toast.success("Story added successfully!");
+      } else {
+        toast.error(data.message || "Something went wrong");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || "Failed to save story");
+    }
+  };
 
   return (
-    <div className='fixed inset-0 z-50 min-h-screen bg-black/80 backdrop-blur text-white flex items-center justify-center p-4'>
-      <div className='w-full max-w-md'>
-        {/* header */}
-        <div className='text-center mb-4 flex items-center justify-between'>
-          <button onClick={() => setShowModal(false)} className='text-white p-2 cursor-pointer'>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 min-h-screen bg-black/80 backdrop-blur text-white">
+      <div className="w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => setShowModal(false)} className="p-2 text-white">
             <ArrowLeft />
           </button>
-          <h2 className='text-lg font-semibold'>Create Story</h2>
-          <span className='w-10'></span>
+          <h2 className="text-lg font-semibold">Create Story</h2>
+          <span className="w-10"></span>
         </div>
 
-        {/* story preview */}
-        <div className='rounded-lg h-96 flex items-center justify-center relative overflow-hidden' style={{ background: background }}>
-          {mode === 'text' && (
+        {/* Story Preview */}
+        <div
+          className="relative flex items-center justify-center h-96 overflow-hidden rounded-lg"
+          style={{ background }}
+        >
+          {mode === "text" && (
             <textarea
-              className='bg-transparent text-white w-full h-full p-6 text-lg resize-none focus:outline-none text-center'
-              placeholder='What is your mood today?'
-              onChange={(e) => setText(e.target.value)}
+              className="w-full h-full p-6 text-lg text-center bg-transparent resize-none focus:outline-none"
+              placeholder="What is your mood today?"
               value={text}
+              onChange={(e) => setText(e.target.value)}
             />
           )}
 
-          {mode === 'media' && preview && (
+          {mode === "media" && preview && (
             media?.type.startsWith("image") ? (
-              <img src={preview} alt="story-preview" className='object-contain max-h-full' />
+              <img src={preview} alt="story-preview" className="object-contain max-h-full" />
             ) : (
-              <video src={preview} controls className='object-contain max-h-full' />
+              <video src={preview} controls className="object-contain max-h-full" />
             )
           )}
 
-          {mode === 'ai' && preview && (
-            <img src={preview} alt="AI story" className='object-contain max-h-full rounded' />
+          {mode === "ai" && preview && (
+            <img src={preview} alt="AI story" className="object-contain max-h-full rounded" />
           )}
         </div>
 
-        {/* color buttons */}
+        {/* Background color picker */}
         {mode === "text" && (
-          <div className='flex mt-4 gap-2 flex-wrap'>
-            {bgColor.map((color) => (
+          <div className="flex flex-wrap gap-2 mt-4">
+            {bgColors.map((color) => (
               <button
                 key={color}
-                className='w-6 h-6 rounded-full ring cursor-pointer'
+                className="w-6 h-6 rounded-full ring cursor-pointer"
                 style={{ background: color }}
                 onClick={() => setBackground(color)}
-              ></button>
+              />
             ))}
           </div>
         )}
 
-        {/* media input + action */}
-        <div className='mt-4 flex items-center justify-between'>
-          <div className='flex gap-2'>
-            <button onClick={() => setMode("text")} className={`px-3 py-1 rounded ${mode === "text" ? "bg-white/20" : ""}`}>Text</button>
-            <label className='px-3 py-1 rounded cursor-pointer bg-white/20'>
-              Media
-              <input type="file" accept="image/*,video/*" onChange={handleMediaUpload} hidden />
-            </label>
+        {/* Mode buttons + Share */}
+        <div className="flex items-center justify-between mt-4">
+          <div className="flex gap-2">
             <button
-            onClick={() => setMode("ai")}
-            className={`px-3 py-1 rounded transition-colors duration-200 ${
-            mode === "ai" ? "bg-purple-500 text-white" : "bg-purple-100 text-purple-700"
-              }`}
-             >
-             AI
+              onClick={() => setMode("text")}
+              className={`px-3 py-1 rounded ${mode === "text" ? "bg-white/20" : ""}`}
+            >
+              Text
             </button>
 
+            <label className="px-3 py-1 rounded bg-white/20 cursor-pointer">
+              Media
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleMediaUpload}
+                hidden
+              />
+            </label>
+
+            <button
+              onClick={() => setMode("ai")}
+              className={`px-3 py-1 rounded transition-colors duration-200 ${
+                mode === "ai" ? "bg-purple-500 text-white" : "bg-purple-100 text-purple-700"
+              }`}
+            >
+              AI
+            </button>
           </div>
-        <button
-     onClick={() =>
-    toast.promise(handleCreateStory(), {
-      loading: 'Saving...',
-      success: 'Vibe Added!!',
-      error: (e) =><p> e.message </p>,
-    })
-  }
-  className='bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded font-semibold'
->
-  Share
-</button>
 
-
+          <button
+            disabled={mode === "ai" && !preview}
+            onClick={handleCreateStory}
+            className="px-4 py-2 font-semibold text-white bg-blue-600 rounded hover:bg-blue-700"
+          >
+            Share
+          </button>
         </div>
 
-        {/* AI input field */}
-        {mode === "ai" && (
-          <AIStoryGenerator onGenerated={(img) => setPreview(img)} />
-        )}
+        {/* AI Story Generator */}
+        {mode === "ai" && <AIStoryGenerator onGenerated={(img) => setPreview(img)} />}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default StoryModal
+export default StoryModal;

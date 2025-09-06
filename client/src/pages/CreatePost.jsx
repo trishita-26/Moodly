@@ -1,84 +1,78 @@
-import React, { useState } from 'react'
-import { dummyUserData } from '../assets/assets'
-import { Image, X } from 'lucide-react'
-import toast from 'react-hot-toast'
+import React, { useState } from "react"
+import toast from "react-hot-toast"
+import api from "../api/axios" // ✅ same axios instance jo CreatePost mein use ho raha hai
 
-const CreatePost = () => {
-  
-  const [content, setContent] = useState('')
-  const [images, setImages] = useState([])
-  const [loading, setLoading] = useState(false)
+const AIStoryGenerator = ({ onGenerated }) => {
+  const [aiPrompt, setAiPrompt] = useState("")
+  const [aiImage, setAiImage] = useState(null)
+  const [loadingAI, setLoadingAI] = useState(false)
 
-  const user = dummyUserData;
+  const handleGenerateAIStory = async () => {
+    if (!aiPrompt.trim()) {
+      return Promise.reject(new Error("Please enter a prompt."))
+    }
 
-  const handleSubmit = async ()=> {
+    setLoadingAI(true)
 
+    try {
+      // ✅ Axios instance handle karega baseURL (http://localhost:4000 ya proxy)
+      const { data } = await api.post("/api/ai/generate", { prompt: aiPrompt })
+
+      if (data.imageUrl) {
+        setAiImage(data.imageUrl)
+
+        // parent ko notify karo (StoryModal)
+        if (onGenerated) onGenerated(data.imageUrl)
+
+        return Promise.resolve()
+      } else {
+        return Promise.reject(new Error("No image generated."))
+      }
+    } catch (error) {
+      return Promise.reject(
+        error.response?.data?.error || error.message || "AI generation failed."
+      )
+    } finally {
+      setLoadingAI(false)
+    }
   }
 
   return (
-    <div className='min-h-screen bg-gradient-to-b from-slate-50 to-white'>
-      <div className='max-w-6xl mx-auto p-6'>
-        {/*Title */}
-        <div className='mb-8'>
-           <h1 className='text-3xl font-bold text-red-400 mb-2'>Create Post</h1>
-        <p className='text-pink-400'> Share your Vibe</p>
-         
-         </div>
+    <div className="p-4 bg-black/20 rounded-lg mt-3">
+      <input
+        type="text"
+        placeholder="Enter your idea..."
+        value={aiPrompt}
+        onChange={(e) => setAiPrompt(e.target.value)}
+        className="px-3 py-2 rounded w-full bg-white/10 mb-2 text-sm"
+      />
 
+      <button
+        disabled={loadingAI}
+        onClick={() =>
+          toast.promise(handleGenerateAIStory(), {
+            loading: "Generating...",
+            success: "AI Story Generated 🎉",
+            error: (err) => err.message || "Oops, something went wrong!",
+          })
+        }
+        className="w-full bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded font-semibold disabled:opacity-50"
+      >
+        {loadingAI ? "Generating..." : "Create with AI"}
+      </button>
 
-         {/*Form */}
-         <div className='max-w-xl bg-white p-4 sm:p-8 sm:pb-3 rounded-xl shadow-md space-y-4'>
-          <img src={user.profile_picture} alt="" className='w-12 h-12 rounded-full shadow'/>
-          {/*Header */}
-          <div>
-            <h2 className='font-semibold text-purple-500'>{user.full_name}</h2>
-            <p className='text-sm text-pink-400'>@{user.username}</p>
-
-          </div>
-
-          {/*Text area */}
-          <textarea className='w-full resize-none max-h-20 mt-4 text-sm outline-none placeholder-gray-600' placeholder="What's the newest tea 👀👀👀 " onChange={(e)=> setContent(e.target.value)} value={content}/>
-          {/*Images*/ }
-          {
-            images.length>0 && <div className='flex flex-wrap gap-2 mt-4'>
-              {images.map((image,i)=>(
-                <div key={i} className='relative group'>
-                  <img src={URL.createObjectURL(image)} className='h-20 rounded-md' alt=''/>
-
-                  <div onClick={()=> setImages(images.filter((_ , index)=>index!== i))} className ='absolute hidden group-hover:flex justify-center items-center top-0 right-0 bottom-0 left-0 bg-black/40 rounded-md cursor-pointer'>
-                    < X className='w-6 h-6 text-white'/>
-                  </div>
-
-                  </div>
-              ))}
-            </div>
-
-          }
-          {/*Bottom Bar */}
-          <div className='flex items-center justify-between pt-3 border-t border-gray-300'>
-            <label htmlFor="images" className='flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition cursor-pointer'>
-              <Image className='size-6'/>
-            </label>
-            <input type="file" id="images" accept='image/*' hidden multiple onChange={(e)=>setImages([...images, ...e.target.files])} />
-
-            <button disabled={loading} onClick={()=> toast.promise (
-              handleSubmit(),
-              {
-                loading: 'uploading........',
-                success:<p>Post Added</p>,
-                error:<p> Oops sorry!!</p>,
-              }
-            )} className='text-sm bg-gradient-to-r from-pink-400 to-pink-600 hover:from-pink-700 hover:to-purple-700 active:scale-95 transition text-white font-medium px-8 py-2 rounded-md cursor-pointer'>
-              Publish Post
-            </button>
-          </div>
-
-         </div>
-       
-      </div>
-      
-      </div>
+      {/* Preview */}
+      {aiImage && (
+        <div className="mt-3">
+          <img
+            src={aiImage}
+            alt="AI Story"
+            className="rounded-lg object-contain max-h-60 w-full"
+          />
+        </div>
+      )}
+    </div>
   )
 }
 
-export default CreatePost
+export default AIStoryGenerator
