@@ -21,7 +21,11 @@ await connectDB();
 
 
 app.use(express.json());
-app.use(cors());
+app.use(
+cors({
+    origin:"https://moodly-two.vercel.app/"
+})
+);
 app.use(clerkMiddleware());
 
 
