@@ -1,6 +1,6 @@
 import express from "express"; // <--- ye missing tha
 import { getChatMessages, sendMessage, sseController } from "../controller/messageController.js";
-import { upload } from "../configs/multer.js";
+import  upload  from "../configs/multer.js";
 import { protect } from "../middlewares/auth.js";
 
 const messageRouter = express.Router();
