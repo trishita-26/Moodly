@@ -32,12 +32,13 @@ export const addPost = async (req, res) => {
         });
       });
     }
-
+   console.log(req.user)
     // Create new post with the text and image URLs
     const newPost = new Post({
-      user: req.user.id, // From your 'protect' middleware
+      user: req.user._id, // From your 'protect' middleware
       text: text,
       images: uploadedImages,
+      post_type: req.body.post_type
     });
 
     await newPost.save();

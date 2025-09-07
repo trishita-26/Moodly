@@ -38,7 +38,7 @@ const Discover = () => {
   const handleFollow = async (userIdToFollow) => {
     try {
       const token = await getToken();
-      const { data } = await api.post(`/api/user/follow/${userIdToFollow}`, {}, {
+      const { data } = await api.post(`/api/user/follow`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
 

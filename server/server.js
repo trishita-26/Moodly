@@ -11,10 +11,6 @@ import storyRouter from './routes/storyRoutes.js';
 import messageRouter from './routes/messageRoutes.js';
 import aiRouter from './routes/aiRouter.js';
 
-
-
-
-
 const app = express();
 
 await connectDB();
@@ -23,7 +19,7 @@ await connectDB();
 app.use(express.json());
 app.use(
 cors({
-    origin:"https://moodly-two.vercel.app"
+    origin:"http://localhost:5173"
 })
 );
 app.use(clerkMiddleware());

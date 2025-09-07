@@ -116,6 +116,7 @@ export const discoverUsers = async (req, res) => {
 export const followUsers = async (req, res) => {
   try {
     const { userId } = req.auth;
+    console.log(userId)
     const { id } = req.body;
 
     const user = await User.findById(userId);
@@ -128,6 +129,7 @@ export const followUsers = async (req, res) => {
     await user.save();
 
     const toUser = await User.findById(id);
+    console.log(toUser)
     toUser.followers.push(userId);
     await toUser.save();
 
