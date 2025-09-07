@@ -6,49 +6,47 @@ import User from "../models/user.js";
 // Add Post
 export const addPost = async (req, res) => {
   try {
-    // Agar tumhare JWT middleware object return karta hai, to req.auth.userId use karo
-    const userId = req.auth.userId || req.auth().userId;
+    const { text } = req.body;
+    const uploadedImages = [];
 
-    const { content, post_type } = req.body;
-    const images = req.files;
-
-    let image_urls = [];
-
-    if (images && images.length) {
-      image_urls = await Promise.all(
-        images.map(async (image) => {
-          const fileBuffer = fs.readFileSync(image.path);
-
-          const response = await imagekit.upload({
-            file: fileBuffer,
-            fileName: image.originalname,
-          });
-
-          const url = imagekit.url({
-            path: response.filePath,
-            transformation: [
-              { quality: "auto" },
-              { format: "webp" },
-              { width: "1280" },
-            ],
-          });
-
-          return url;
+    // Check if files were uploaded (req.files will be an array)
+    if (req.files && req.files.length > 0) {
+      
+      // Create an array of upload promises
+      const uploadPromises = req.files.map(file => 
+        imagekit.upload({
+          file: file.buffer, // Use .buffer, NOT .path
+          fileName: file.originalname,
+          folder: "/posts" // Optional: A folder in ImageKit
         })
       );
+      
+      // Wait for all files to finish uploading
+      const uploadResults = await Promise.all(uploadPromises);
+      
+      // Get the URLs and fileIds from the results
+      uploadResults.forEach(result => {
+        uploadedImages.push({
+          url: result.url,
+          fileId: result.fileId
+        });
+      });
     }
 
-    await Post.create({
-      user: userId,
-      content,
-      image_urls,
-      post_type,
+    // Create new post with the text and image URLs
+    const newPost = new Post({
+      user: req.user.id, // From your 'protect' middleware
+      text: text,
+      images: uploadedImages,
     });
 
-    res.json({ success: true, message: "Post created successfully" });
+    await newPost.save();
+
+    res.status(201).json({ success: true, message: "Post created successfully", post: newPost });
+
   } catch (error) {
-    console.log(error);
-    res.json({ success: false, message: error.message });
+    console.error("Error creating post:", error);
+    res.status(500).json({ success: false, message: "Server error while creating post" });
   }
 };
 
