@@ -97,3 +97,45 @@ export const getUserRecentMessages= async(req, res)=>{
         res.json({ success: false, message:error.message});
     }
 }
+//recent msg 
+export const getRecentMessages = async (req, res) => {
+  try {
+    const userId = req.auth.userId || req.auth().userId;
+
+    // Latest message from each unique chat
+    const messages = await Message.aggregate([
+      {
+        $match: {
+          $or: [{ from_user_id: userId }, { to_user_id: userId }],
+        },
+      },
+      {
+        $sort: { createdAt: -1 },
+      },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ["$from_user_id", userId] },
+              "$to_user_id",
+              "$from_user_id",
+            ],
+          },
+          doc: { $first: "$$ROOT" },
+        },
+      },
+      { $replaceRoot: { newRoot: "$doc" } },
+    ]);
+
+    // Populate sender info
+    const populated = await User.populate(messages, {
+      path: "from_user_id to_user_id",
+      select: "full_name profile_picture",
+    });
+
+    res.json({ success: true, messages: populated });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
